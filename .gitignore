@@ -1,0 +1,13 @@
+node_modules
+.env*
+
+tmp
+proto
+weights_uncompressed
+weights_unused
+docs
+out
+build
+face-img
+
+.git.bak
