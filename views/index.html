@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html>
+    <head>
+        <script src="face-api.js"></script>
+        <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    </head>
     <body>
-        123${title}
+        123
     </body>
+    <script>
+        $(document).ready(function() {
+            initRun()
+        });
+        async function initRun() {
+            await faceapi.loadFaceLandmarkModel('/')
+            await faceapi.loadFaceRecognitionModel('/')
+        }
+    </script>
 </html>
