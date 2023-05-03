@@ -13,10 +13,23 @@ function getCurrentFaceDetectionNet() {
     }
 }
 
-function setFaceDetector (detectorName) { 
+async function setFaceDetector (detectorName) { 
     selectedFaceDetector = detectorName
     // SSD_MOBILENETV1 or TINY_FACE_DETECTOR
     if (!isFaceDetectionModelLoaded()) {
         await getCurrentFaceDetectionNet().load('/')
     }
+}
+
+// ssd_mobilenetv1 options
+let minConfidence = 0.5
+
+// tiny_face_detector options
+let inputSize = 512
+let scoreThreshold = 0.5
+
+function getFaceDetectorOptions() {
+  return selectedFaceDetector === SSD_MOBILENETV1
+    ? new faceapi.SsdMobilenetv1Options({ minConfidence })
+    : new faceapi.TinyFaceDetectorOptions({ inputSize, scoreThreshold })
 }
