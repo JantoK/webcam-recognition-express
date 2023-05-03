@@ -2,18 +2,558 @@
 <html>
     <head>
         <script src="face-api.js"></script>
+        <script src="js/faceapiControls.js"></script>
+        <script src="js/mock.js"></script>
         <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
+        <link rel="stylesheet" href="stylesheets/style.css">
     </head>
     <body>
-        123
+        <div class="mainBox col">
+            <h4>数据库已录入的所有信息</h4>
+            <div class="dataTable row">
+                <div class="dataTable-head col">
+                    <div class="title">姓名：</div>
+                    <div class="title" style="height: 184px;line-height: 184px;">照片：</div>
+                    <div class="title">人脸信息：</div>
+                </div>
+                <div class="dataTable-body row" id="dataTable-body">
+                </div>
+            </div>
+            <h4>人员信息录入</h4>
+            <div class="inputInfo limitBox col padding">
+                <label for="name">姓名：</label>
+                <input type="text" id="name" name="name" required>
+                <label for="image">上传人脸照片：</label>
+                <div class="btn margin" id="imageUpload" onclick="openSnap()">拍摄照片</div>
+                <div id="imgBox" class="imgBox">
+                    <img id="imagePreview" class="imagePreview">
+                </div>
+                <button class="btn margin" id="inputBtn" disabled onclick="submitApplication()">提交</button>
+            </div>
+            <hr width="100%">
+            <h4>模拟门禁检测人脸识别</h4>
+            <div class="row margin" style="line-height: 50px;">
+                <label>摄像头开/关</label>
+                <label class="switch_on">
+                    <input id="switch-btn" type="checkbox">
+                    <span class="input"></span>
+                </label>
+            </div>
+            <div class="row">
+                <div class="row limitBox" id="webcamVideo" style="display: none">
+                    <div style="position: relative" class="margin">
+                        <video onloadedmetadata="onPlay.bind(null, this, false)()" id="inputVideo" autoplay muted playsinline></video>
+                        <canvas id="overlay" />
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="takePhoto" class="popup-box">
+            <div class="popup-content col">
+                <div class="popup-title">
+                    <div class="popup-title-result">
+                        请根据提示授权打开摄像头
+                    </div>
+                </div>
+                <div class="popup-title select">
+                    <button id="doneSnap" disabled class="btn btn-success margin" onclick="doneSnap()">保存上传</button>
+                    <button id="reSnap" class="btn btn-error margin" onclick="reSnap()">退出重拍</button>
+                </div>
+                <div class="webcam-video row" id="webcamVideo-pop">
+                    <div class="popup-imgBox">
+                        <video id="inputVideo-pop" onloadedmetadata="onPlay.bind(null, this, true)()" autoplay muted playsinline></video>
+                        <canvas id="captureCanvas" class="overlay"/>
+                        <canvas id="overlay-pop" class="overlay"/>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="showIdentity" class="popup-box">
+            <div class="popup-content">
+                <div class="popup-title">
+                    <div class="popup-title-result">
+                        请问您是否是 <span id="identityName" style="color: rgb(41, 118, 233)"></span> ？ 
+                    </div>
+                </div>
+                <div class="popup-title select">
+                    <button id="doneSnap" class="btn btn-success" onclick="reIdentity()" style="margin-bottom: 0;">是，进入园区</button>
+                </div>
+                <div class="popup-title select">
+                    <button id="reSnap" class="btn btn-error" onclick="reIdentity()">否，重新拍摄</button>
+                </div>
+                <div class="webcam-video row" id="webcamVideo-pop">
+                    <div class="popup-imgBox imgBox">
+                        <img class="matchImg" src="" id="matchImg">
+                    </div>
+                </div>
+            </div>
+        </div>
     </body>
     <script>
+        let globalFaceMatcher = []
+        let i = 0
+
         $(document).ready(function() {
             initRun()
         });
         async function initRun() {
             await faceapi.loadFaceLandmarkModel('/')
             await faceapi.loadFaceRecognitionModel('/')
+            await setFaceDetector(SSD_MOBILENETV1) 
+            // await setFaceDetector(TINY_FACE_DETECTOR)
+            await updateDatabaseInfo()
+            addInputListner()
+            addSwitchBtnListner()
+        }
+        // 更新展示数据库中存在的数据信息
+        async function updateDatabaseInfo() {
+            // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
+            const databaseLabeledDescriptors = await Promise.all(
+                faceGroupWithDescription.map(async ({name, description}) => {
+                    const float32ArrayDescriptor = [Float32Array.from(description.split(','))]
+                    return new faceapi.LabeledFaceDescriptors(name, float32ArrayDescriptor)
+                })
+            )
+            // 创建globalFaceMatcher数据库人脸信息
+            globalFaceMatcher = new faceapi.FaceMatcher(databaseLabeledDescriptors, 0.5)
+
+            // 遍历人脸数据，渲染每一行到表格中
+            const tbody = document.getElementById('dataTable-body');
+            tbody.innerHTML = faceGroupWithDescription.map(({name, img, description}) => {
+                return `
+                    <div class="list col">
+                        <div class="cell">${name}</div>
+                        <div class="cell">
+                            <img src="${img}">
+                        </div>
+                        <div class="cell">${description ? '已录入' : '未录入'}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 弹窗摄像头人脸照片的Listner
+        function addInputListner() {
+            // 获取 previewImg 和 name 的 input 元素
+            const previewImg = document.getElementById('imagePreview');
+            const nameInput = document.getElementById('name');
+            const submitBtn = document.getElementById('inputBtn');
+
+            // 为 previewImg 的 src 属性绑定 change 事件
+            previewImg.addEventListener('load', handleInputChange);
+            // 为 name 的 input 绑定 input 事件
+            nameInput.addEventListener('input', handleInputChange);
+
+            // input 事件处理函数
+            function handleInputChange() {
+              // 判断 previewImg 的 src 和 name 的 input 是否为空
+              console.log(previewImg.src)
+              if (previewImg.src && nameInput.value) {
+                // 设置提交按钮为可用状态
+                submitBtn.disabled = false;
+              } else {
+                // 设置提交按钮为不可用状态
+                submitBtn.disabled = true;
+              }
+            }
+        }
+
+        // 摄像头滑动切换按钮的Listner
+        function addSwitchBtnListner() {
+            const imageUploadBtn = document.getElementById('imageUpload');
+            document.getElementById('switch-btn').addEventListener('input', async function () {
+                if (this.checked) {
+                    // 禁用上传按钮，防止重复id
+                    imageUploadBtn.removeEventListener('click', openSnap);
+                    imageUploadBtn.classList.add('disabled');
+                    this.nextElementSibling.classList.add("checked");
+                    // 拍摄初始化
+                    initCanvas('overlay')
+                    initWebCam('webcamVideo', 'inputVideo')
+                    document.getElementById('webcamVideo').style.display = 'block'
+                } else {
+                    // 恢复上传按钮功能
+                    imageUploadBtn.addEventListener('click', openSnap);
+                    imageUploadBtn.classList.remove('disabled');
+                    this.nextElementSibling.classList.remove("checked");
+                    // 拍摄关闭
+                    closeWebcam('inputVideo')
+                    document.getElementById('webcamVideo').style.display = 'none'
+                    initCanvas('overlay')
+                }
+            })
+        }
+
+        function closeWebcamRecognition() {
+
+        }
+
+        // 更新展示数据库中存在的数据信息
+        async function updateDatabaseInfo() {
+            // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
+            const databaseLabeledDescriptors = await Promise.all(
+                faceGroupWithDescription.map(async ({name, description}) => {
+                    const float32ArrayDescriptor = [Float32Array.from(description.split(','))]
+                    return new faceapi.LabeledFaceDescriptors(name, float32ArrayDescriptor)
+                })
+            )
+            // 创建globalFaceMatcher数据库人脸信息
+            globalFaceMatcher = new faceapi.FaceMatcher(databaseLabeledDescriptors, 0.5)
+
+            // 遍历人脸数据，渲染每一行到表格中
+            const tbody = document.getElementById('dataTable-body');
+            tbody.innerHTML = faceGroupWithDescription.map(({name, img, description}) => {
+                return `
+                    <div class="list col">
+                        <div class="cell">${name}</div>
+                        <div class="cell">
+                            <img src="${img}">
+                        </div>
+                        <div class="cell">${description ? '已录入' : '未录入'}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 初始化webcam组件
+        async function initWebCam(webcamVido, inputVideo) {
+            const webCamVidoDiv = document.getElementById(webcamVido);
+            const videoEl = document.getElementById(inputVideo);
+            let stream = null
+
+            const videoBoxWidth = webCamVidoDiv.offsetWidth
+            webCamVidoDiv.style.height = videoBoxWidth + 'px'
+
+            videoEl.srcObject = await navigator.mediaDevices.getUserMedia({video: {
+                width: videoBoxWidth,
+                height: videoBoxWidth
+            }})
+
+            videoEl.style.display = 'block'
+        }
+
+        // 摄像头检测对比人像
+        async function onPlay(videoEl, isPop) { // isPop: 是否为弹窗上传照片模式，否则为监控摄像头模式
+            console.log(i++) // debug查看调用频率
+
+            // if(videoEl.paused || videoEl.ended || !isFaceDetectionModelLoaded())
+            //     return setTimeout(() => onPlay(videoEl, isPop))  // 摄像头开启失败，返回重试
+
+            const options = getFaceDetectorOptions()
+            const faceDescription = await faceapi.detectSingleFace(videoEl, options)
+                                        .withFaceLandmarks()
+                                        .withFaceDescriptor()
+            console.log('faceDescription: ', faceDescription);
+
+            if (faceDescription) {// 检测到了人脸
+                if(isPop) {
+                    // 是弹窗上传照片模式
+                    renderCaptureCanvas(faceDescription)
+                    // 绘制人脸分数到canvas
+                    return
+                } else {
+                    // 摄像头模式
+                    // 找出最符合的人脸信息
+                    const bestMatch = globalFaceMatcher.findBestMatch(faceDescription.descriptor, 0.34)
+                    console.log('bestMatch: ', bestMatch);
+                    // 绘制人脸分数到canvas
+                    const canvas = $('#overlay').get(0)
+                    const dims = faceapi.matchDimensions(canvas, videoEl, true)
+                    faceapi.draw.drawDetections(canvas, faceapi.resizeResults(faceDescription, dims))
+                    if (bestMatch.label === 'unknown') {
+                        // 未检测出人脸，继续检测
+                        return setTimeout(() => onPlay(videoEl, isPop))
+                    } else {
+                        // 配对成功，弹窗
+                        let matchImg = faceGroupWithDescription.find(item => item.name === bestMatch.label)
+                        openIdentity(bestMatch.label, matchImg.img)
+                        return
+                    }
+                }
+            } 
+            setTimeout(() => onPlay(videoEl, isPop))
+        }
+
+        function renderCaptureCanvas(faceDescription) {
+            // 视频
+            const video = document.getElementById('inputVideo-pop');
+            // 捕获的照片截图
+            const captureCanvas = document.getElementById('captureCanvas');
+            // 脸部描述
+            const overlay = document.getElementById('overlay-pop');
+
+            captureCanvas.width = video.videoWidth
+            captureCanvas.height = video.videoHeight
+            captureCanvas.getContext('2d').drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            // 将descriptor设置到img的data-source
+            // img.src = captureCanvas.toDataURL('image/jpg');
+            localStorage.setItem('tempDescriptor', faceDescription.descriptor)
+            // captureCanvas.dataset.source = faceDescription.descriptor;
+
+            const dims = faceapi.matchDimensions(overlay, captureCanvas, true)
+            faceapi.draw.drawDetections(captureCanvas, faceapi.resizeResults(faceDescription, dims))
+
+            // 将视频流关掉
+            closeWebcam('inputVideo-pop')
+
+            document.getElementById('doneSnap').disabled = false
+        }
+
+        // 退出重拍
+        function reSnap() {
+            // 视频流关掉
+            closeWebcam('inputVideo-pop')
+            document.getElementById('takePhoto').style.display = 'none'
+            initCanvas('captureCanvas', 'overlay-pop')
+        }
+
+        // 拍摄完成，照片上传
+        function doneSnap() {
+            // 捕获的照片截图
+            const captureCanvas = document.getElementById('captureCanvas');
+            const imagePreview = document.getElementById('imagePreview');
+
+            // 判断canvas是否为空
+            let blank = document.createElement('canvas');//系统获取一个空canvas对象
+            blank.width = captureCanvas.width;
+            blank.height = captureCanvas.height;
+            let isNull = captureCanvas.toDataURL() == blank.toDataURL()
+
+            if (isNull) {
+                // 目前逻辑是出错，关掉弹窗 
+                alert('出错！并未检测到照片！')
+                reSnap()
+                return
+            }
+            imagePreview.src = captureCanvas.toDataURL()
+            reSnap()
+        }
+
+        // 打开拍摄
+        function openSnap() {
+            initCanvas('captureCanvas', 'overlay-pop')
+            document.getElementById('takePhoto').style.display = 'block'
+            initWebCam('webcamVideo-pop', 'inputVideo-pop')
+        }
+
+        // 弹出配对成功窗口
+        function openIdentity(name, img) {
+            document.getElementById('showIdentity').style.display = 'block'
+            document.getElementById('identityName').innerHTML = name
+            document.getElementById('matchImg').src = img
+        }
+
+        function reIdentity() {
+            document.getElementById('showIdentity').style.display = 'none'
+            document.getElementById('identityName').innerHTML = ''
+            document.getElementById('matchImg').src = ''
+            videoEl = document.getElementById('inputVideo')
+            onPlay(videoEl, false)
+        }
+
+        // 关闭视频流
+        function closeWebcam(inputVideo) {
+            const video = document.getElementById(inputVideo);
+            video.style.display = "none"
+            if (video.srcObject && video.srcObject.getTracks) {
+                video.srcObject.getTracks().forEach(track => {
+                    track.stop();
+                });
+            }
+            video.srcObject = null;
+        }
+
+        // 初始化画布
+        function initCanvas() {
+            for (let i = 0; i < arguments.length; i++) {
+                const canvas = document.getElementById(arguments[i]);
+                if (canvas) { 
+                    const ctx = canvas.getContext("2d");
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    // 将画布清空并重置其宽度和高度
+                    ctx.clearRect(0, 0, width, height);
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+            }
+        }
+
+        // 提交
+        function submitApplication() {
+            const previewImg = document.getElementById('imagePreview');
+            const nameInput = document.getElementById('name');
+            if (previewImg.src && nameInput.value) {
+                let name = nameInput.value
+                let img = previewImg.src
+                let description = localStorage.getItem('tempDescriptor')
+                // mock提交数据
+                console.log({ name, img, description })
+                faceGroupWithDescription.push({ name, img, description })
+                updateDatabaseInfo()
+                alert('提交成功')
+                // 清除所有
+                previewImg.src = ''
+                nameInput.value = ''
+                return
+            }
+            alert('姓名或照片值为空，请刷新页面再次提交')
+            return
+            
         }
     </script>
+    <style>
+        .dataTable {
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0px 3px 5px rgba(0, 0, 0, 0.2);
+            height: 320px;
+        }
+        .dataTable-head {
+            background-color: #F5F5F5;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            box-sizing: content-box;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        .dataTable-head .title {
+            text-align: center;
+            padding: 12px;
+            width: 100px;
+        }
+        .cell {
+            padding: 12px;
+            text-align: center;
+            border-right: 1px solid #DDD;
+            width: 200px;
+            display: flex;
+            justify-content: center;
+        }
+        .cell img {
+            display: block;
+            width: 160px;
+            height: auto;
+            height: 160px;
+        }
+        .dataTable-body {
+            overflow-x: auto;
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        .dataTable-body .list {
+            align-items: center;
+            border-top: 1px solid #DDD;
+        }
+        .switch_on {
+            font-size: 16px;
+            width: 40px;
+            height: 50px;
+            line-height: 50px;
+            margin-left: 16px;
+        }
+        
+        .switch_on span,.switch_on input {
+            width: 40px;
+            height: 50px;
+            position: absolute;
+            background: none;
+            -webkit-appearance: none;
+        }
+        .switch_on span.input.checked:before {
+            border-color: #64bd63;
+            box-shadow: #64bd63 0px 0px 0px 16px inset;
+            background-color: #64bd63;
+            transition: border 0.4s, box-shadow 0.4s, background-color 1.2s;
+        }
+        
+        .switch_on span.input:before {
+            content: '';
+            width: 40px;
+            height: 25px;
+            border-radius: 20px;
+            display: inline-block;
+            position: absolute;
+            top: 12.5px;
+            left: 0;
+            border: 1px solid #dfdfdf;
+            box-shadow: #dfdfdf 0px 0px 0px 0px inset;
+            background-color: #fdfdfd;
+            transition: border 0.4s, box-shadow 0.4s;
+            background-clip: content-box;
+        }
+        
+        .switch_on span.input.checked:after {
+            left: 15px;
+        }
+        
+        .switch_on span.input:after {
+            content: '';
+            width: 25px;
+            height: 25px;
+            position: absolute;
+            top: 12.5px;
+            left: 0;
+            border-radius: 100%;
+            background-color: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+            transition: left 0.2s;
+        }
+
+        /* Popup container */
+        .popup-box {
+            display: none;  /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+        }
+
+        /* Popup content */
+        .popup-content {
+            background-color: #fefefe;
+            margin: 15% auto; /* 15% from the top and centered */
+            padding: 20px 40px;
+            border: 1px solid #888;
+            width: 80%; /* Could be more or less, depending on screen size */
+        }
+
+        .popup-title {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .popup-title .btn {
+            width: 100%;
+        }
+
+        .result-name {
+            color:cornflowerblue;
+            font-weight: bold;
+        }
+
+        .popup-title-result {
+            display: flex;
+        }
+
+        .popup-imgBox {
+            width: 100%;
+            position: relative;
+            display: flex;
+        }
+
+        .webcam-video {
+            width: 100%;
+            max-width: 640px;
+        }
+    </style>
 </html>
