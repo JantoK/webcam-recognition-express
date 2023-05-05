@@ -9,9 +9,11 @@ const app = express();
 
 const viewsDir = path.join(__dirname, 'views')
 app.use(express.static(viewsDir))
+app.use(require('./middleware/sqlServer'))
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'face-api-js')))
 app.use(express.static(path.join(__dirname, 'face-api-weights')))
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -19,8 +21,9 @@ app.use(express.urlencoded({ extended: false }));
 app.use(logger('dev'));
 app.use(cookieParser());
 
+const usersRouter = require('./routes/users');
 // app.use('/', indexRouter);
-// app.use('/users', usersRouter);
+app.use('/users', usersRouter);
 app.get('/', (req, res) => res.redirect('/home'))
 app.get('/home', (req, res) => res.sendFile(path.join(viewsDir, 'index.html')))
 
