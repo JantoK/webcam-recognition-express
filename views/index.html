@@ -192,9 +192,16 @@
 
         // 更新展示数据库中存在的数据信息
         async function updateDatabaseInfo() {
+          let databaseInfo = []
+          await fetch('/users/your')
+            .then(response => response.json())
+            .then(persons => {
+              databaseInfo = persons
+            })
+            .catch(error => console.error(error));
             // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
             const databaseLabeledDescriptors = await Promise.all(
-                faceGroupWithDescription.map(async ({name, description}) => {
+              databaseInfo.map(async ({name, description}) => {
                     const float32ArrayDescriptor = [Float32Array.from(description.split(','))]
                     return new faceapi.LabeledFaceDescriptors(name, float32ArrayDescriptor)
                 })
@@ -204,7 +211,7 @@
 
             // 遍历人脸数据，渲染每一行到表格中
             const tbody = document.getElementById('dataTable-body');
-            tbody.innerHTML = faceGroupWithDescription.map(({name, img, description}) => {
+            tbody.innerHTML = databaseInfo.map(({name, img, description}) => {
                 return `
                     <div class="list col">
                         <div class="cell">${name}</div>

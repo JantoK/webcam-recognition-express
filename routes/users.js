@@ -4,9 +4,25 @@ const sql = require('mssql');
 
 router.get('/your',async (req, res) => {
   try {
-    const result = await req.pool.request().query('SELECT * FROM dbo.测试表');
-    console.log('result: ', result);
-    res.json(result)
+     // 查询数据
+     req.pool.request().query('SELECT * FROM person', (err, result) => {
+      if (err) {
+        console.log(err);
+        res.status(500).send('Error while querying database');
+        return;
+      }
+
+      // 处理数据
+      const persons = result.recordset.map(person => ({
+        id: person.id,
+        name: person.name,
+        img: person.img,
+        description: person.description
+      }));
+
+      // 返回数据
+      res.json(persons);
+    });
   } catch (err) {
     console.error('Error retrieving data from database:', err);
     res.status(500).send('Error retrieving data from database');
