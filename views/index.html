@@ -8,6 +8,9 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
         <link rel="stylesheet" href="stylesheets/style.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast/dist/css/iziToast.min.css">
+        <!-- 引入 iziToast 脚本文件 -->
+        <script src="https://cdn.jsdelivr.net/npm/izitoast/dist/js/iziToast.min.js"></script>        
         <script>
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
@@ -117,32 +120,6 @@
             addInputListner()
             addSwitchBtnListner()
         }
-        // 更新展示数据库中存在的数据信息
-        async function updateDatabaseInfo() {
-            // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
-            const databaseLabeledDescriptors = await Promise.all(
-                faceGroupWithDescription.map(async ({name, description}) => {
-                    const float32ArrayDescriptor = [Float32Array.from(description.split(','))]
-                    return new faceapi.LabeledFaceDescriptors(name, float32ArrayDescriptor)
-                })
-            )
-            // 创建globalFaceMatcher数据库人脸信息
-            globalFaceMatcher = new faceapi.FaceMatcher(databaseLabeledDescriptors, 0.5)
-
-            // 遍历人脸数据，渲染每一行到表格中
-            const tbody = document.getElementById('dataTable-body');
-            tbody.innerHTML = faceGroupWithDescription.map(({name, img, description}) => {
-                return `
-                    <div class="list col">
-                        <div class="cell">${name}</div>
-                        <div class="cell">
-                            <img src="${img}">
-                        </div>
-                        <div class="cell">${description ? '已录入' : '未录入'}</div>
-                    </div>
-                `;
-            }).join('');
-        }
 
         // 弹窗摄像头人脸照片的Listner
         function addInputListner() {
@@ -201,10 +178,32 @@
             globalDatabaseInfo = []
             await fetch('/users/selectAll')
                 .then(response => response.json())
-                .then(persons => {
-                    globalDatabaseInfo = persons
+                .then(response => {
+                    if (response.code !== 200) {
+                        return
+                    } 
+                    iziToast.success({
+                      title: '操作成功！',
+                      message: '获取了最新数据',
+                      position: 'center'
+                    });
+                    const persons = response.result.map(person => ({
+                        id: person.id,
+                        name: person.name,
+                        img: person.img,
+                        description: person.description
+                    }));
+                    // 返回数据
+                    globalDatabaseInfo = persons;
+                    console.log('globalDatabaseInfo: ', globalDatabaseInfo);
                 })
-                .catch(error => console.error(error));
+            .catch(error => console.error(error));
+            // await fetch('/users/selectAll')
+            //     .then(response => response.json())
+            //     .then(persons => {
+            //         globalDatabaseInfo = persons
+            //     })
+            //     .catch(error => console.error(error));
             // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
             const databaseLabeledDescriptors = await Promise.all(
             globalDatabaseInfo.map(async ({name, description}) => {

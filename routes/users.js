@@ -25,7 +25,7 @@ router.get('/selectAll',async (req, res) => {
       }));
 
       // 返回数据
-      res.json(persons);
+      res.json({ result: persons, code: 200 });
     });
   } catch (err) {
     console.error('Error retrieving data from database:', err);
