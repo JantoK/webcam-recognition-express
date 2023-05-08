@@ -14,6 +14,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname, 'face-api-js')))
 app.use(express.static(path.join(__dirname, 'face-api-weights')))
 
+app.get('/sw.js', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'sw.js'));
+})
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));

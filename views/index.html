@@ -8,6 +8,15 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
         <link rel="stylesheet" href="stylesheets/style.css">
+        <script>
+            if ('serviceWorker' in navigator) {
+              window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').then(() => {
+                  console.log('Service Worker registered.');
+                });
+              });
+            }
+          </script>
     </head>
     <body>
         <div class="mainBox col">
