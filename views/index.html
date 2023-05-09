@@ -8,9 +8,8 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.css">
         <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
         <link rel="stylesheet" href="stylesheets/style.css">
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/izitoast/dist/css/iziToast.min.css">
-        <!-- 引入 iziToast 脚本文件 -->
-        <script src="https://cdn.jsdelivr.net/npm/izitoast/dist/js/iziToast.min.js"></script>        
+        <link rel="stylesheet" href="stylesheets/iziToast.min.css">
+        <script src="js/iziToast.min.js"></script>        
         <script>
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', () => {
@@ -117,12 +116,12 @@
             await setFaceDetector(SSD_MOBILENETV1) 
             // await setFaceDetector(TINY_FACE_DETECTOR)
             await updateDatabaseInfo()
-            addInputListner()
-            addSwitchBtnListner()
+            addInputListener()
+            addSwitchBtnListener()
         }
 
-        // 弹窗摄像头人脸照片的Listner
-        function addInputListner() {
+        // 弹窗摄像头人脸照片的Listener
+        function addInputListener() {
             // 获取 previewImg 和 name 的 input 元素
             const previewImg = document.getElementById('imagePreview');
             const nameInput = document.getElementById('name');
@@ -147,8 +146,8 @@
             }
         }
 
-        // 摄像头滑动切换按钮的Listner
-        function addSwitchBtnListner() {
+        // 摄像头滑动切换按钮的Listener
+        function addSwitchBtnListener() {
             const imageUploadBtn = document.getElementById('imageUpload');
             document.getElementById('switch-btn').addEventListener('input', async function () {
                 if (this.checked) {
@@ -181,7 +180,7 @@
                 .then(response => {
                     if (response.code !== 200) {
                         return
-                    } 
+                    }
                     iziToast.success({
                       title: '操作成功！',
                       message: '获取了最新数据',
@@ -195,15 +194,8 @@
                     }));
                     // 返回数据
                     globalDatabaseInfo = persons;
-                    console.log('globalDatabaseInfo: ', globalDatabaseInfo);
                 })
-            .catch(error => console.error(error));
-            // await fetch('/users/selectAll')
-            //     .then(response => response.json())
-            //     .then(persons => {
-            //         globalDatabaseInfo = persons
-            //     })
-            //     .catch(error => console.error(error));
+                .catch(error => console.error(error));
             // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
             const databaseLabeledDescriptors = await Promise.all(
             globalDatabaseInfo.map(async ({name, description}) => {
@@ -230,13 +222,13 @@
         }
 
         // 初始化webcam组件
-        async function initWebCam(webcamVido, inputVideo) {
-            const webCamVidoDiv = document.getElementById(webcamVido);
+        async function initWebCam(webcamVideo, inputVideo) {
+            const webCamVideoDiv = document.getElementById(webcamVideo);
             const videoEl = document.getElementById(inputVideo);
             let stream = null
 
-            const videoBoxWidth = webCamVidoDiv.offsetWidth
-            webCamVidoDiv.style.height = videoBoxWidth + 'px'
+            const videoBoxWidth = webCamVideoDiv.offsetWidth
+            webCamVideoDiv.style.height = videoBoxWidth + 'px'
 
             videoEl.srcObject = await navigator.mediaDevices.getUserMedia({video: {
                 width: videoBoxWidth,
