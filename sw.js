@@ -8,12 +8,14 @@ workbox.routing.registerRoute(
   })
 );
 
-// 在每隔 30 分钟更新数据
-// setInterval(() => {
-//   console.log('[Service Worker] Updating data...');
-//   // 执行更新数据的操作
-// }, 30 * 60 * 1000);
-
 setInterval(() => {
-    console.log('[Service Worker] Updating data...');
-}, 1000);
+    self.clients.matchAll().then(function(clients) {
+        clients.forEach(function(client) {
+            client.postMessage({
+                action: 'callMethod',
+                methodName: 'updateDatabaseInfo',
+                args: []
+            });
+        });
+    });
+}, 30 * 60 * 1000);

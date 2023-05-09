@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <!-- 必须的 meta 标签 -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <!-- Bootstrap 的 CSS 文件 -->
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+        <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-Fy6S3B9q64WdZWQUiU+q4/2Lc9npb8tCaSX9FK7E8HnRr0Jz8D6OP9dO5Vg3Q9ct" crossorigin="anonymous"></script>        
+        <!-- 本地引入的文件 -->
+        <script src="face-api.js"></script>
+        <script src="js/faceapiControls.js"></script>
+        <link rel="stylesheet" href="stylesheets/style.css">
+        <link rel="stylesheet" href="stylesheets/iziToast.min.css">
+        <script src="js/iziToast.min.js"></script>
+
+        <title>预约人脸检测系统</title>
+        <!-- serviceWorker-注册 -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/sw.js')
+                    .then(() => {
+                        console.log('Service Worker registered.');
+                        navigator.serviceWorker.addEventListener('message', function(event) {
+                            if (event.data.action === 'callMethod') {
+                                window[event.data.methodName](event.data.args);
+                            }
+                        });
+                    })
+                    .catch(function(error) {
+                        console.error('Service Worker 注册失败', error);
+                    });
+                });
+            }
+        </script>
+    </head>
+
+    <body>
+        <div class="container-fluid">
+            <h4 class="text-center m-3">预约人脸检测系统</h4>
+            <div id="no-camera" class="mx-auto text-center">请允许访问您的摄像头以继续操作。</div>
+            <div id="webcamVideo" class="d-flex justify-content-center align-items-center m-auto mx-3" 
+                 style="width: 90vw; 
+                        height: 90vw;
+                        max-width: 980px;
+                        max-height: 980px;
+                        position: relative;">
+                <video id="inputVideo" 
+                       onloadedmetadata="onPlay(this)" 
+                       autoplay muted playsinline
+                       style="display: none">
+                </video>
+                <canvas id="overlay" />
+            </div>
+        </div>
+    </body>
+    <script>
+        let globalFaceMatcher = []
+        let globalDatabaseInfo = []
+        let i = 0
+
+        $(document).ready(function() {
+            initRun()
+        });
+
+        async function initRun() {
+            await faceapi.loadFaceLandmarkModel('/')
+            await faceapi.loadFaceRecognitionModel('/')
+            await setFaceDetector(SSD_MOBILENETV1) 
+            // await setFaceDetector(TINY_FACE_DETECTOR)
+            await updateDatabaseInfo()
+            initWebCam()
+            // addSwitchBtnListener()
+        }
+
+        // 更新展示数据库中存在的数据信息
+        async function updateDatabaseInfo() {
+            globalDatabaseInfo = []
+            await fetch('/users/selectAll')
+                .then(response => response.json())
+                .then(response => {
+                    if (response.code !== 200) {
+                        return
+                    }
+                    iziToast.success({
+                      title: '操作成功！',
+                      message: '获取了最新数据',
+                      position: 'center'
+                    });
+                    const persons = response.result.map(person => ({
+                        id: person.id,
+                        name: person.name,
+                        img: person.img,
+                        description: person.description
+                    }));
+                    // 返回数据
+                    globalDatabaseInfo = persons;
+                })
+                .catch(error => console.error(error));
+            // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
+            const databaseLabeledDescriptors = await Promise.all(
+            globalDatabaseInfo.map(async ({name, description}) => {
+                const float32ArrayDescriptor = [Float32Array.from(description.split(','))]
+                    return new faceapi.LabeledFaceDescriptors(name, float32ArrayDescriptor)
+                })
+            )
+            // 创建globalFaceMatcher数据库人脸信息
+            globalFaceMatcher = new faceapi.FaceMatcher(databaseLabeledDescriptors, 0.5)
+        }
+
+        async function initWebCam() {
+            const webCamVideoDiv = document.getElementById('webcamVideo');
+            const videoEl = document.getElementById('inputVideo');
+            const overlay = document.getElementById('overlay')
+            let stream = null
+
+            const videoBoxWidth = webCamVideoDiv.offsetWidth
+            webCamVideoDiv.style.height = videoBoxWidth + 'px'
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({video: {
+                    width: videoBoxWidth,
+                    height: videoBoxWidth
+                }})
+                videoEl.srcObject = stream
+                videoEl.style.display = 'block'
+            } catch (error) {
+                console.error('找不到摄像头或用户拒绝授权。', error)
+            }
+        }
+
+        // 摄像头检测对比人像
+        async function onPlay(videoEl) {
+            console.log(i++) // debug查看调用频率
+
+            // if(videoEl.paused || videoEl.ended || !isFaceDetectionModelLoaded())
+            //     return setTimeout(() => onPlay(videoEl, isPop))  // 摄像头开启失败，返回重试
+
+            const options = getFaceDetectorOptions()
+            const faceDescription = await faceapi.detectSingleFace(videoEl, options)
+                                        .withFaceLandmarks()
+                                        .withFaceDescriptor()
+            console.log('faceDescription: ', faceDescription);
+
+            if (faceDescription) {
+                // 检测到了人脸
+                // 摄像头模式
+                // 找出最符合的人脸信息
+                const bestMatch = globalFaceMatcher.findBestMatch(faceDescription.descriptor, 0.34)
+                console.log('bestMatch: ', bestMatch);
+                // 绘制人脸分数到canvas
+                const canvas = $('#overlay').get(0)
+                // const dims = { width: videoEl.videoWidth, height: videoEl.videoWidth }
+                const dims = faceapi.matchDimensions(canvas, videoEl, true)
+                console.log('canvas: ', canvas);
+                console.log('dims: ', dims);
+                faceapi.draw.drawDetections(canvas, faceapi.resizeResults(faceDescription, dims))
+                console.log('faceapi.resizeResults(faceDescription, dims): ', faceapi.resizeResults(faceDescription, dims));
+                if (bestMatch.label === 'unknown') {
+                    // 未检测出人脸，继续检测
+                    return setTimeout(() => onPlay(videoEl))
+                } else {
+                    // 配对成功，弹窗
+                    console.log('配对成功')
+                    // let matchImg = faceGroupWithDescription.find(item => item.name === bestMatch.label)
+                    // openIdentity(bestMatch.label, matchImg.img)
+                    return setTimeout(() => onPlay(videoEl))
+                }
+            } 
+            setTimeout(() => onPlay(videoEl))
+        }
+    </script>
+</html>
