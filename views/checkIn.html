@@ -55,11 +55,100 @@
                 <canvas id="overlay" />
             </div>
         </div>
+        <!-- Modal -->
+        <div class="modal fade" id="staticBackdrop" data-backdrop="static" data-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="staticBackdropLabel">信息确认</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="imgBox">
+                            <img id="c_img" class="img-fluid">
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                              申请信息
+                            </div>
+                            <div class="card-body">
+                              <div class="row">
+                                <div class="col-lg-6 col-sm-6 mb-3">
+                                  <div class="card">
+                                    <div class="card-body">
+                                      <h5 class="card-title">姓名</h5>
+                                      <p class="card-text" id="c_name"></p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-lg-6 col-sm-6 mb-3">
+                                    <div class="card">
+                                      <div class="card-body">
+                                        <h5 class="card-title">申请单号</h5>
+                                        <p class="card-text" id="c_listId">44150219980211231223</p>
+                                      </div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-6 col-sm-6 mb-3">
+                                  <div class="card">
+                                    <div class="card-body">
+                                      <h5 class="card-title">申请日期</h5>
+                                      <p class="card-text" id="c_date">XXX</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-lg-6 col-sm-6 mb-3">
+                                    <div class="card">
+                                      <div class="card-body">
+                                        <h5 class="card-title">前往部门</h5>
+                                        <p class="card-text" id="c_goto">信息管理部</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                <div class="col-lg-6 col-sm-6 mb-3">
+                                  <div class="card">
+                                    <div class="card-body">
+                                      <h5 class="card-title">审核人</h5>
+                                      <p class="card-text" id="c_approver">XXX</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div class="col-lg-6 col-sm-6 mb-3">
+                                    <div class="card">
+                                      <div class="card-body">
+                                        <h5 class="card-title">审核状态</h5>
+                                        <p class="card-text" id="c_auditResults">已通过</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                <div class="col-lg-12 col-sm-12 mb-3">
+                                  <div class="card">
+                                    <div class="card-body">
+                                      <h5 class="card-title">申请理由</h5>
+                                      <p class="card-text" id="c_c_auditReason">XXX</p>
+                                    </div>
+                                  </div>
+                                </div>
+                                <!-- 其他项目 -->
+                              </div>
+                            </div>
+                          </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">重新识别</button>
+                        <button type="button" class="btn btn-primary">确定进入</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </body>
     <script>
         let globalFaceMatcher = []
         let globalDatabaseInfo = []
         let i = 0
+        let webcamStream = null
 
         $(document).ready(function() {
             initRun()
@@ -68,9 +157,10 @@
         async function initRun() {
             await faceapi.loadFaceLandmarkModel('/')
             await faceapi.loadFaceRecognitionModel('/')
-            await setFaceDetector(SSD_MOBILENETV1) 
-            // await setFaceDetector(TINY_FACE_DETECTOR)
+            // await setFaceDetector(SSD_MOBILENETV1) 
+            await setFaceDetector(TINY_FACE_DETECTOR)
             await updateDatabaseInfo()
+            // $('#staticBackdrop').modal('show')
             initWebCam()
             // addSwitchBtnListener()
         }
@@ -91,12 +181,14 @@
                     });
                     const persons = response.result.map(person => ({
                         id: person.id,
-                        name: person.name,
+                        // 这里加上id到name中防止重名和注入攻击
+                        name: person.name + '#' + person.id,
                         img: person.img,
                         description: person.description
                     }));
                     // 返回数据
                     globalDatabaseInfo = persons;
+                    console.log('globalDatabaseInfo: ', globalDatabaseInfo);
                 })
                 .catch(error => console.error(error));
             // mock从数据库拉取所有人脸信息，构建databaseLabeledDescriptors
@@ -135,9 +227,6 @@
         async function onPlay(videoEl) {
             console.log(i++) // debug查看调用频率
 
-            // if(videoEl.paused || videoEl.ended || !isFaceDetectionModelLoaded())
-            //     return setTimeout(() => onPlay(videoEl, isPop))  // 摄像头开启失败，返回重试
-
             const options = getFaceDetectorOptions()
             const faceDescription = await faceapi.detectSingleFace(videoEl, options)
                                         .withFaceLandmarks()
@@ -146,30 +235,62 @@
 
             if (faceDescription) {
                 // 检测到了人脸
-                // 摄像头模式
                 // 找出最符合的人脸信息
                 const bestMatch = globalFaceMatcher.findBestMatch(faceDescription.descriptor, 0.34)
                 console.log('bestMatch: ', bestMatch);
                 // 绘制人脸分数到canvas
                 const canvas = $('#overlay').get(0)
-                // const dims = { width: videoEl.videoWidth, height: videoEl.videoWidth }
                 const dims = faceapi.matchDimensions(canvas, videoEl, true)
-                console.log('canvas: ', canvas);
-                console.log('dims: ', dims);
                 faceapi.draw.drawDetections(canvas, faceapi.resizeResults(faceDescription, dims))
-                console.log('faceapi.resizeResults(faceDescription, dims): ', faceapi.resizeResults(faceDescription, dims));
                 if (bestMatch.label === 'unknown') {
                     // 未检测出人脸，继续检测
                     return setTimeout(() => onPlay(videoEl))
                 } else {
                     // 配对成功，弹窗
                     console.log('配对成功')
-                    // let matchImg = faceGroupWithDescription.find(item => item.name === bestMatch.label)
-                    // openIdentity(bestMatch.label, matchImg.img)
-                    return setTimeout(() => onPlay(videoEl))
+                    // 根据id再次获取一次信息以保证信息一致性
+                    let matchItem = globalDatabaseInfo.find(item => item.name === bestMatch.label)
+                    console.log('matchItem: ', matchItem);
+                    console.log('bestMatch', bestMatch)
+                    await fetch('/users/selectById', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ id : matchItem.id })
+                    })
+                    .then(response => response.json())
+                    .then(response => {
+                        console.log('response: ', response);
+                      if (response.code !== 200) {
+                        console.error(response.msg);
+                        return setTimeout(() => onPlay(videoEl))
+                      }
+                      // 判断下checkIn是否为false否则不弹窗而是警告
+                      // 测试下默认成功checkIn
+                      console.log('获取到最新数据:', response.result);
+                      showCheckIn(response.result)
+                      return
+                      // 处理返回的数据
+                    })
+                    .catch(error => console.error(error));
                 }
-            } 
-            setTimeout(() => onPlay(videoEl))
+            } else {
+                setTimeout(() => onPlay(videoEl))
+            }
+        }
+
+        function showCheckIn(info) {
+            const staticBackdrop = $('#staticBackdrop');
+            staticBackdrop.find('#c_name').html(info.name);
+            $('#c_img').attr('src', info.img);
+            // staticBackdrop.find('#c_listId').html(info.id);
+            // staticBackdrop.find('#c_date').html(info.date);
+            // staticBackdrop.find('#c_goto').html(info.goto);
+            // staticBackdrop.find('#c_approver').html(info.approver);
+            // staticBackdrop.find('#c_auditResults').html(info.auditResults);
+            // staticBackdrop.find('#c_auditReason').html(info.auditReason);
+            staticBackdrop.modal('show');
         }
     </script>
 </html>
