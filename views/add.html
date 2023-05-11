@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <!-- 必须的 meta 标签 -->
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <!-- Bootstrap 的 CSS 文件 -->
+        <link rel="stylesheet" href="stylesheets/bootstrap.min.css" >
+        <script src="js/jquery.slim.min.js"></script>
+        <script src="js/bootstrap.bundle.min.js"></script>        
+        <!-- 本地引入的文件 -->
+        <script src="face-api.js"></script>
+        <script src="js/faceapiControls.js"></script>
+        <link rel="stylesheet" href="stylesheets/style.css">
+        <link rel="stylesheet" href="stylesheets/iziToast.min.css">
+        <script src="js/iziToast.min.js"></script>
+
+        <title>预约人脸检测系统</title>
+        <!-- serviceWorker-注册 -->
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/sw.js')
+                    .then(() => {
+                        console.log('Service Worker registered.');
+                        navigator.serviceWorker.addEventListener('message', function(event) {
+                            if (event.data.action === 'callMethod') {
+                                // 使用postMessage发送消息被sw.js控制执行方法
+                                window[event.data.methodName](event.data.args);
+                            }
+                        });
+                    })
+                    .catch(function(error) {
+                        console.error('Service Worker 注册失败', error);
+                    });
+                });
+            }
+        </script>
+    </head>
+
+    <body>
+        <div class="card">
+            <div class="card-header">来访登记申请单</div>
+            <div class="card-body">
+                <form action="submit" method="post">
+                    <div class="form-group">
+                        <label for="name">姓名：</label>
+                        <input type="text" class="form-control" name="name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="reason">来访原因：</label>
+                        <textarea class="form-control" name="reason" required></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="department">前往的部门：</label>
+                        <select class="form-control" name="department" required>
+                            <option value="" disabled selected>请选择部门：</option>
+                            <option value="IT">IT信息部</option>
+                            <option value="HR">人力资源部</option>
+                            <option value="Marketing">市场部</option>
+                            <option value="Sales">销售部</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="approver">审批人：</label>
+                        <input type="text" class="form-control" name="approver" required>
+                    </div>
+
+                    <div class="form-group text-center">
+                        <button type="button" class="btn btn-outline-primary btn-square align-self-center">
+                            <div class="upload-btn-content">
+                                <i class="fas fa-camera"></i>
+                                <span>点击进行人脸识别拍摄</span>
+                            </div>
+                        </button>
+                    </div>
+                    <!-- 定义提交按钮 -->
+                    <div class="form-group text-center">
+                        <button type="submit" class="btn btn-primary m-auto">信息确认无误，提交</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="modal fade" id="takePhotoModal" tabindex="-1" role="dialog" aria-labelledby="takePhotoLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="takePhotoLabel">请根据提示授权打开摄像头</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="text-center">
+                                    <video id="inputVideo-pop" onloadedmetadata="onPlay.bind(null, this, true)()" autoplay muted playsinline></video>
+                                    <canvas id="captureCanvas" class="overlay"></canvas>
+                                    <canvas id="overlay-pop" class="overlay"></canvas>
+                                </div>
+                            </div>
+                            <div class="col-12 d-flex justify-content-between">
+                                <button id="reSnap" class="btn btn-danger" onclick="reSnap()">退出重拍</button>
+                                <button id="doneSnap" disabled class="btn btn-success" onclick="doneSnap()">保存上传</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    <script>
+        $(document).ready(function() {
+            initRun()
+        });
+        async function initRun() {
+            await faceapi.loadFaceLandmarkModel('/')
+            await faceapi.loadFaceRecognitionModel('/')
+            await setFaceDetector(SSD_MOBILENETV1)
+            addSubmitListener()
+            $('#takePhotoModal').modal('show')
+        }
+
+        // 提交监听
+        function addSubmitListener() {
+            const form = document.querySelector('form');
+            form.addEventListener('submit', (event) => {
+                // 阻止表单默认提交行为
+                event.preventDefault();
+
+                const data = {};
+                // 获取表单中所有带 name 属性的元素
+                const formElements = Array.from(event.target.elements).filter(el => el.name);
+                // 遍历表单元素，将其值存入 data 对象
+                formElements.forEach((element) => {
+                    const { name, value } = element;
+                    data[name] = value;
+                });
+          
+                // 验证表单数据是否合法
+                const { name, reason, department, approver } = data;
+          
+                if (!name || !reason || !department || !approver) {
+                    alert('请填写完整信息！');
+                    return;
+                }
+
+                // 如果表单数据全部合法，则通过请求或其他方式提交该数据
+                console.log(data);
+                // submit the form or do something else
+            });
+        }
+    </script>
+    <style>
+    .btn-square {
+        width: 300px;
+        height: 300px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0 auto;
+    }
+
+    .btn-square .upload-btn-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        padding: 1rem;
+        width: 100%;
+        height: 100%;
+    }
+
+    .btn-square i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }    
+    </style>
+</html>

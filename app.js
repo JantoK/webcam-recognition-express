@@ -31,6 +31,7 @@ app.use('/users', usersRouter);
 app.get('/', (req, res) => res.redirect('/home'))
 app.get('/home', (req, res) => res.sendFile(path.join(viewsDir, 'index.html')))
 app.get('/checkIn', (req, res) => res.sendFile(path.join(viewsDir, 'checkIn.html')))
+app.get('/add', (req, res) => res.sendFile(path.join(viewsDir, 'add.html')))
 
 // // catch 404 and forward to error handler
 // app.use(function(req, res, next) {
