@@ -88,7 +88,8 @@ router.post('/selectById', async (req, res) => {
       id: data.recordset[0].id,
       name: data.recordset[0].name,
       img: data.recordset[0].img,
-      description: data.recordset[0].description
+      description: data.recordset[0].description,
+      checkIn: data.recordset[0].checkIn
     };
 
     // 返回数据
@@ -128,7 +129,7 @@ router.post('/updateCheckIn', async (req, res) => {
   
       if(result.rowsAffected[0] !== 1){
         // 更新条数不为1
-        res.json({ result, code: 500 });
+        res.json({ result: '请将此订单记录并反馈管理员', code: 500 });
       }
       res.json({ result: '更新成功', code: 200 });
     } catch (err) {
