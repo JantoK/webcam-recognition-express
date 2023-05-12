@@ -36,29 +36,43 @@ router.get('/selectAll',async (req, res) => {
 // 新增用户信息
 router.post('/add', (req, res) => {
     try {
-      const { name, img, description } = req.body;
-  
-      if (!name || !img || !description) {
-        return res.json({ result: '参数不能为空', code: 400 });
-      }
-      // 插入数据
-      req.pool.request()
+        let finalImg = null;
+        const { 
+            name, 
+            img, 
+            description, 
+            department,
+            approver,
+            reason
+        } = req.body;
+        // 判断是路径型img还是binary型img_date
+
+        if (!name || !img || !description || !department || !approver || !reason) {
+            return res.json({ result: '参数不能为空', code: 400 });
+        }
+      
+        // 插入数据并返回插入记录的id、name、img和description
+        const queryStr = `
+          INSERT INTO check_in_application (name, img, description, department, approver, reason)
+          OUTPUT INSERTED.id, INSERTED.name, INSERTED.img, INSERTED.description
+          VALUES (@name, @img, @description, @department, @approver, @reason)
+        `;
+        req.pool.request()
         .input('name', sql.NVarChar(50), name)
-        .input('img', sql.NVarChar(500), img)
         .input('description', sql.NVarChar(sql.MAX), description)
-        .query('INSERT INTO person (name, img, description) OUTPUT INSERTED.id VALUES (@name, @img, @description)', (err, result) => {
+        .input('img' , sql.VarBinary(sql.MAX), img)
+        .input('department', sql.NVarChar(50), department)
+        .input('approver', sql.NVarChar(10), approver)
+        .input('reason', sql.NVarChar(10), reason)
+        .query(queryStr, (err, result) => {
           if (err) {
             console.log(err);
             return res.json({ result: '添加失败', code: 500 });
           }
+          const { id, name, img, description } = result.recordset[0];
           // 返回添加成功的记录
           res.json({
-            result: {
-                id: result.recordset[0].id,
-                name,
-                img,
-                description
-            },
+            result: { id, name, img, description },
             code: 200
           });
         });

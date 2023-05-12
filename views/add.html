@@ -15,34 +15,14 @@
         <link rel="stylesheet" href="stylesheets/iziToast.min.css">
         <script src="js/iziToast.min.js"></script>
 
-        <title>预约人脸检测系统</title>
-        <!-- serviceWorker-注册 -->
-        <script>
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register('/sw.js')
-                    .then(() => {
-                        console.log('Service Worker registered.');
-                        navigator.serviceWorker.addEventListener('message', function(event) {
-                            if (event.data.action === 'callMethod') {
-                                // 使用postMessage发送消息被sw.js控制执行方法
-                                window[event.data.methodName](event.data.args);
-                            }
-                        });
-                    })
-                    .catch(function(error) {
-                        console.error('Service Worker 注册失败', error);
-                    });
-                });
-            }
-        </script>
+        <title>来访登记申请单</title>
     </head>
 
     <body>
-        <div class="card">
+        <div class="card" style="min-width: 300px;">
             <div class="card-header">来访登记申请单</div>
             <div class="card-body">
-                <form action="submit" method="post">
+                <form method="post">
                     <div class="form-group">
                         <label for="name">姓名：</label>
                         <input type="text" class="form-control" name="name" required>
@@ -67,40 +47,44 @@
                     </div>
 
                     <div class="form-group text-center">
-                        <button type="button" class="btn btn-outline-primary btn-square align-self-center">
+                        <button id="takePhotoBtn" type="button" class="btn btn-outline-primary btn-square align-self-center" onclick="openSnap()">
                             <div class="upload-btn-content">
                                 <i class="fas fa-camera"></i>
                                 <span>点击进行人脸识别拍摄</span>
                             </div>
                         </button>
+                        <div id="imagePreviewBox" class="btn-square" style="display: none">
+                            <img id="imagePreview" />
+                        </div>
                     </div>
                     <!-- 定义提交按钮 -->
-                    <div class="form-group text-center">
+                    <div class="form-group text-center d-flex justify-content-around">
+                        <button id="reSnap" class="btn btn-primary m-auto" onclick="openSnap()" disabled>重新拍摄</button>
                         <button type="submit" class="btn btn-primary m-auto">信息确认无误，提交</button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <div class="modal fade" id="takePhotoModal" tabindex="-1" role="dialog" aria-labelledby="takePhotoLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal fade" id="takePhotoModal" tabindex="-1" role="dialog" aria-labelledby="takePhotoLabel" aria-hidden="true" style="width: 100%">
+            <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="takePhotoLabel">请根据提示授权打开摄像头</h5>
-                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close" onclick="reSnap()">
                             <span aria-hidden="true">&times;</span>
                         </button>
                     </div>
                     <div class="modal-body">
                         <div class="row">
                             <div class="col-12">
-                                <div class="text-center">
-                                    <video id="inputVideo-pop" onloadedmetadata="onPlay.bind(null, this, true)()" autoplay muted playsinline></video>
+                                <div id="videoBox" class="text-center" style="position: relative">
+                                    <video id="inputVideo" onloadedmetadata="onPlay(this)" autoplay muted playsinline></video>
                                     <canvas id="captureCanvas" class="overlay"></canvas>
-                                    <canvas id="overlay-pop" class="overlay"></canvas>
+                                    <canvas id="overlay" class="overlay"></canvas>
                                 </div>
                             </div>
-                            <div class="col-12 d-flex justify-content-between">
+                            <div class="col-12 d-flex justify-content-between mt-2">
                                 <button id="reSnap" class="btn btn-danger" onclick="reSnap()">退出重拍</button>
                                 <button id="doneSnap" disabled class="btn btn-success" onclick="doneSnap()">保存上传</button>
                             </div>
@@ -117,9 +101,9 @@
         async function initRun() {
             await faceapi.loadFaceLandmarkModel('/')
             await faceapi.loadFaceRecognitionModel('/')
-            await setFaceDetector(SSD_MOBILENETV1)
+            // await setFaceDetector(SSD_MOBILENETV1)
+            await setFaceDetector(TINY_FACE_DETECTOR)
             addSubmitListener()
-            $('#takePhotoModal').modal('show')
         }
 
         // 提交监听
@@ -128,7 +112,6 @@
             form.addEventListener('submit', (event) => {
                 // 阻止表单默认提交行为
                 event.preventDefault();
-
                 const data = {};
                 // 获取表单中所有带 name 属性的元素
                 const formElements = Array.from(event.target.elements).filter(el => el.name);
@@ -146,10 +129,233 @@
                     return;
                 }
 
+                const previewImg = document.getElementById('imagePreview');
+
+                let img = previewImg.src;
+                console.log('img: ', img);
+                let description = localStorage.getItem('tempDescriptor');
+
+                if (img && description) {
+                
+                    // 创建请求体对象
+                    let requestBody = {
+                        name: name,
+                        reason: reason,
+                        department: department,
+                        approver: approver,
+                        img: img,
+                        description: description
+                    };
+                    console.log('requestBody: ', requestBody);
+                    return
+                    // 发起 POST 请求，向服务器提交数据
+                    fetch('/api/visitor', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody)
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            alert('提交成功');
+                            // 清除表单数据和图片预览
+                            return
+                            previewImg.src = '';
+                            nameInput.value = '';
+                            reasonInput.value = '';
+                            departmentInput.selectedIndex = 0;
+                            approverInput.value = '';
+                        } else {
+                            alert('提交失败，请稍后再试');
+                        }
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        iziToast.error({
+                            title: '提交失败！',
+                            message: '请重新拍摄照片或刷新页面重试',
+                            position: 'center'
+                        });
+                    });
+                } else {
+                    iziToast.error({
+                        title: '提交失败！',
+                        message: '请重新拍摄照片或刷新页面重试',
+                        position: 'center'
+                    });
+                }
+
                 // 如果表单数据全部合法，则通过请求或其他方式提交该数据
                 console.log(data);
                 // submit the form or do something else
             });
+
+            // 拍摄按钮监听器
+            const reSnap = document.getElementById('reSnap');
+            const imagePreview = document.getElementById('imagePreview');
+            imagePreview.addEventListener('load', handleInputChange);
+            function handleInputChange() {
+                console.log('imagePreview: ', imagePreview);
+
+              // 判断 previewImg 的 src 和 name 的 input 是否为空
+              if (imagePreview.src) {
+                // 设置提交按钮为可用状态
+                reSnap.disabled = false;
+                reSnap.style.display = 'block'
+              } else {
+                // 设置提交按钮为不可用状态
+                reSnap.disabled = true;
+              }
+            }
+        }
+
+        // 打开拍摄
+        function openSnap() {
+            initCanvas('captureCanvas', 'overlay')
+            // document.getElementById('takePhoto').style.display = 'block'
+            initWebCam()
+            $('#takePhotoModal').modal('show')
+        }
+
+        // 初始化webcam组件
+        async function initWebCam() {
+            const videoBoxEl = document.getElementById('videoBox');
+            const videoEl = document.getElementById('inputVideo');
+            const screenWidth = document.body.clientWidth
+            const tipsTitle = $('#takePhotoLabel').get(0)
+            // 防止是重拍而关闭了videoEl节点
+            videoEl.style.display = "block"
+
+            // modal-lg.width=800
+            const videoBoxWidth = (screenWidth > 740)? 740: (screenWidth - 60)
+            videoBoxEl.style.height = videoBoxWidth + 'px'
+
+            try {
+                videoEl.srcObject = await navigator.mediaDevices.getUserMedia({video: {
+                    width: videoBoxWidth,
+                    height: videoBoxWidth
+                }})
+                tipsTitle.innerHTML = '自动拍摄中，请面向镜头等待识别完成'
+            } catch (error) {
+                tipsTitle.innerHTML = '请根据提示授权打开摄像头'
+                tipsTitle.style.color = 'red'
+                iziToast.error({
+                    title: '摄像头开启失败！',
+                    message: '请授权后刷新页面重试',
+                    position: 'center'
+                });
+            }
+        }
+
+        // 摄像头检测对比人像
+        async function onPlay(videoEl) {
+
+            const options = getFaceDetectorOptions()
+            const faceDescription = await faceapi.detectSingleFace(videoEl, options)
+                                        .withFaceLandmarks()
+                                        .withFaceDescriptor()
+            console.log('faceDescription: ', faceDescription);
+
+            if (faceDescription) {// 检测到了人脸
+                // 是弹窗上传照片模式
+                renderCaptureCanvas(faceDescription)
+                // 绘制人脸分数到canvas
+                return
+            } 
+            setTimeout(() => onPlay(videoEl))
+        }
+
+        function renderCaptureCanvas(faceDescription) {
+            // 视频
+            const video = document.getElementById('inputVideo');
+            // 捕获的照片截图
+            const captureCanvas = document.getElementById('captureCanvas');
+            // 脸部描述
+            const overlay = document.getElementById('overlay');
+
+            captureCanvas.width = video.videoWidth
+            captureCanvas.height = video.videoHeight
+            captureCanvas.getContext('2d').drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+
+            // 将descriptor设置到localStorage
+            // img.src = captureCanvas.toDataURL('image/jpg');
+            localStorage.setItem('tempDescriptor', faceDescription.descriptor)
+            // captureCanvas.dataset.source = faceDescription.descriptor;
+
+            const dims = faceapi.matchDimensions(overlay, captureCanvas, true)
+            faceapi.draw.drawDetections(captureCanvas, faceapi.resizeResults(faceDescription, dims))
+
+            // 将视频流关掉
+            closeWebcam()
+
+            document.getElementById('doneSnap').disabled = false
+        }
+
+        // 关闭视频流
+        function closeWebcam() {
+            const video = document.getElementById('inputVideo');
+            video.style.display = "none"
+            if (video.srcObject && video.srcObject.getTracks) {
+                video.srcObject.getTracks().forEach(track => {
+                    track.stop();
+                });
+            }
+            video.srcObject = null;
+        }
+
+        // 初始化画布
+        function initCanvas() {
+            for (let i = 0; i < arguments.length; i++) {
+                const canvas = document.getElementById(arguments[i]);
+                if (canvas) { 
+                    const ctx = canvas.getContext("2d");
+                    const width = canvas.width;
+                    const height = canvas.height;
+                    // 将画布清空并重置其宽度和高度
+                    ctx.clearRect(0, 0, width, height);
+                    canvas.width = width;
+                    canvas.height = height;
+                }
+            }
+        }
+
+        // 拍摄完成，照片上传
+        function doneSnap() {
+            // 捕获的照片截图
+            const captureCanvas = document.getElementById('captureCanvas');
+            const imagePreview = document.getElementById('imagePreview');
+
+            // 判断canvas是否为空
+            let blank = document.createElement('canvas');//系统获取一个空canvas对象
+            blank.width = captureCanvas.width;
+            blank.height = captureCanvas.height;
+            let isNull = captureCanvas.toDataURL() == blank.toDataURL()
+
+            if (isNull) {
+                // 目前逻辑是出错，关掉弹窗 
+                alert('出错！并未检测到照片！')
+                reSnap()
+                return
+            }
+            $('#imagePreviewBox').get(0).style.display = 'block'
+            $('#takePhotoBtn').get(0).style.display = 'none'
+            imagePreview.src = captureCanvas.toDataURL()
+            reSnap()
+        }
+
+        // 退出重拍
+        function reSnap() {
+            // 视频流关掉
+            closeWebcam()
+            $('#takePhotoModal').modal('hide')
+            initCanvas('captureCanvas', 'overlay')
+        }
+
+        // 提交信息
+        function submit(event) {
+            event.preventDefault();
+            
         }
     </script>
     <style>
@@ -177,6 +383,10 @@
     .btn-square i {
         font-size: 3rem;
         margin-bottom: 1rem;
-    }    
+    }
+    .btn-square img {
+        width: 100%;
+        margin: 0 auto;
+    }  
     </style>
 </html>
