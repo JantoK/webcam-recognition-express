@@ -147,28 +147,17 @@
                         description: description
                     };
                     console.log('requestBody: ', requestBody);
-                    return
                     // 发起 POST 请求，向服务器提交数据
-                    fetch('/api/visitor', {
+                    fetch('/users/addWithImg', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(requestBody)
                     })
-                    .then(response => {
-                        if (response.ok) {
-                            alert('提交成功');
-                            // 清除表单数据和图片预览
-                            return
-                            previewImg.src = '';
-                            nameInput.value = '';
-                            reasonInput.value = '';
-                            departmentInput.selectedIndex = 0;
-                            approverInput.value = '';
-                        } else {
-                            alert('提交失败，请稍后再试');
-                        }
+                    .then(response => response.json())
+                    .then(response=>{
+                        console.log('response: ', response);
                     })
                     .catch(error => {
                         console.error(error);

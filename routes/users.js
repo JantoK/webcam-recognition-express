@@ -36,10 +36,8 @@ router.get('/selectAll',async (req, res) => {
 // 新增用户信息
 router.post('/add', (req, res) => {
     try {
-        let finalImg = null;
         const { 
             name, 
-            img, 
             description, 
             department,
             approver,
@@ -47,20 +45,19 @@ router.post('/add', (req, res) => {
         } = req.body;
         // 判断是路径型img还是binary型img_date
 
-        if (!name || !img || !description || !department || !approver || !reason) {
+        if (!name  || !description || !department || !approver || !reason) {
             return res.json({ result: '参数不能为空', code: 400 });
         }
       
-        // 插入数据并返回插入记录的id、name、img和description
+        // 插入数据并返回插入记录的id、name 和description
         const queryStr = `
-          INSERT INTO check_in_application (name, img, description, department, approver, reason)
-          OUTPUT INSERTED.id, INSERTED.name, INSERTED.img, INSERTED.description
-          VALUES (@name, @img, @description, @department, @approver, @reason)
+          INSERT INTO check_in_application (name, description, department, approver, reason)
+          OUTPUT INSERTED.id, INSERTED.name, INSERTED.description
+          VALUES (@name, @description, @department, @approver, @reason)
         `;
         req.pool.request()
         .input('name', sql.NVarChar(50), name)
         .input('description', sql.NVarChar(sql.MAX), description)
-        .input('img' , sql.VarBinary(sql.MAX), img)
         .input('department', sql.NVarChar(50), department)
         .input('approver', sql.NVarChar(10), approver)
         .input('reason', sql.NVarChar(10), reason)
@@ -80,6 +77,61 @@ router.post('/add', (req, res) => {
         console.error('Error updating data in database:', err);
         res.status(500).send('服务器错误，请重试或联系管理员');
     }
+});
+
+router.post('/addWithImg', async (req, res) => {
+  const requiredFields = ['name', 'img', 'description', 'department', 'approver', 'reason'];
+  if (requiredFields.every(field => req.body[field] != null && req.body[field].trim() !== '')) {
+    try {
+      const connection = await req.pool.acquire();
+      const transaction = new sql.Transaction(connection)
+      await transaction.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
+
+      try {
+        const addImgSql = `INSERT INTO person_img (img) OUTPUT INSERTED.id VALUES (@img);`;
+
+        const addImgResult = await transaction.request()
+          .input('img', sql.VarChar(sql.MAX), req.body['img'])
+          .query(addImgSql);
+
+        console.log('addImgResult: ', addImgResult);
+        const imgId = addImgResult.recordset[0].id;
+
+        const addPersonSql = `
+          INSERT INTO check_in_application (name, img_id, description, department, approver, reason)
+          OUTPUT INSERTED.id, INSERTED.name, INSERTED.description
+          VALUES (@name, @img_id, @description, @department, @approver, @reason)
+        `;
+
+        const addPersonResult = await transaction
+          .input('name', sql.NVarChar(50), req.body['name'])
+          .input('description', sql.NVarChar(sql.MAX), req.body['description'])
+          .input('department', sql.NVarChar(50), req.body['department'])
+          .input('approver', sql.NVarChar(10), req.body['approver'])
+          .input('reason', sql.NVarChar(500), req.body['reason'])
+          .input('img_id', sql.Int, imgId)
+          .query(addPersonSql);
+
+        console.log('addPersonResult: ', addPersonResult);
+        await transaction.commit();
+        res.json({
+          result: addPersonResult,
+          code: 200
+        });
+      } catch (err) {
+        console.error(err);
+        await transaction.rollback();
+        throw err;
+      } finally {
+        req.pool.release(transaction);
+      }
+    } catch (err) {
+      console.error(err);
+      throw err;
+    }
+  } else {
+    res.status(400).send('Missing required fields');
+  }
 });
 
 router.post('/selectById', async (req, res) => {
