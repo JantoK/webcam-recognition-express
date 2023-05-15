@@ -130,9 +130,8 @@
                 }
 
                 const previewImg = document.getElementById('imagePreview');
-
                 let img = previewImg.src;
-                console.log('img: ', img);
+
                 let description = localStorage.getItem('tempDescriptor');
 
                 if (img && description) {
@@ -158,12 +157,20 @@
                     .then(response => response.json())
                     .then(response=>{
                         console.log('response: ', response);
+                        if (response.code === 200) {
+                            iziToast.success({
+                                title: '提交成功！',
+                                message: '正在刷新页面',
+                                position: 'center'
+                            });
+                            return setTimeout(() => location.reload(), 3000)
+                        }
                     })
                     .catch(error => {
                         console.error(error);
                         iziToast.error({
-                            title: '提交失败！',
-                            message: '请重新拍摄照片或刷新页面重试',
+                            title: '数据库出错！',
+                            message: '请刷新页面或联系管理员',
                             position: 'center'
                         });
                     });
@@ -186,16 +193,15 @@
             imagePreview.addEventListener('load', handleInputChange);
             function handleInputChange() {
                 console.log('imagePreview: ', imagePreview);
-
-              // 判断 previewImg 的 src 和 name 的 input 是否为空
-              if (imagePreview.src) {
-                // 设置提交按钮为可用状态
-                reSnap.disabled = false;
-                reSnap.style.display = 'block'
-              } else {
-                // 设置提交按钮为不可用状态
-                reSnap.disabled = true;
-              }
+                // 判断 previewImg 的 src 是否为空
+                if (imagePreview.src) {
+                  // 设置提交按钮为可用状态
+                  reSnap.disabled = false;
+                  reSnap.style.display = 'block'
+                } else {
+                  // 设置提交按钮为不可用状态
+                  reSnap.disabled = true;
+                }
             }
         }
 
@@ -209,6 +215,7 @@
 
         // 初始化webcam组件
         async function initWebCam() {
+            document.getElementById('doneSnap').disabled = true
             const videoBoxEl = document.getElementById('videoBox');
             const videoEl = document.getElementById('inputVideo');
             const screenWidth = document.body.clientWidth
@@ -339,12 +346,6 @@
             closeWebcam()
             $('#takePhotoModal').modal('hide')
             initCanvas('captureCanvas', 'overlay')
-        }
-
-        // 提交信息
-        function submit(event) {
-            event.preventDefault();
-            
         }
     </script>
     <style>

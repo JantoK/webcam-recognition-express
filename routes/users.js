@@ -84,14 +84,10 @@ router.post('/addWithImg', async (req, res) => {
     if (!requiredFields.every(field => req.body[field] != null && req.body[field].trim() !== '')) {
         return res.json({ result: '参数缺失', code: 400 });
     }
+    let transaction = null
     try {
         transaction = new sql.Transaction(req.pool)
-        await transaction.begin(transactionErr => {
-            if (err) {
-                console.log('transaction事务开启失败：', transactionErr)
-                return res.json({ result: '请求失败，刷新重试或联系管理员', code: 500 });
-            }
-        });
+        await transaction.begin();
         const request = new sql.Request(transaction)
         // 上传照片
         const addImgSql = `INSERT INTO person_img (img) OUTPUT INSERTED.id VALUES (@img);`;
@@ -103,7 +99,7 @@ router.post('/addWithImg', async (req, res) => {
 
         // 添加申请单
         const addPersonSql = `
-            INSERT INTO person (name, img_id, description, department, approver, reason)
+            INSERT INTO person (name, img_id, description, department, approver, reason, checkIn)
             VALUES (@name, @img_id, @description, @department, @approver, @reason, 0)
         `;
 
@@ -120,6 +116,7 @@ router.post('/addWithImg', async (req, res) => {
         await transaction.commit();
         res.json({ result: '上传成功！', code: 200 });
     } catch(err) {
+        console.log('错误，正在回滚')
         if (transaction) {
             try {
                 await transaction.rollback();
