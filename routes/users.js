@@ -80,59 +80,57 @@ router.post('/add', (req, res) => {
 });
 
 router.post('/addWithImg', async (req, res) => {
-  const requiredFields = ['name', 'img', 'description', 'department', 'approver', 'reason'];
-  if (requiredFields.every(field => req.body[field] != null && req.body[field].trim() !== '')) {
+    const requiredFields = ['name', 'img', 'description', 'department', 'approver', 'reason'];
+    if (!requiredFields.every(field => req.body[field] != null && req.body[field].trim() !== '')) {
+        return res.json({ result: '参数缺失', code: 400 });
+    }
     try {
-      const connection = await req.pool.acquire();
-      const transaction = new sql.Transaction(connection)
-      await transaction.begin(sql.ISOLATION_LEVEL.READ_COMMITTED);
-
-      try {
+        transaction = new sql.Transaction(req.pool)
+        await transaction.begin(transactionErr => {
+            if (err) {
+                console.log('transaction事务开启失败：', transactionErr)
+                return res.json({ result: '请求失败，刷新重试或联系管理员', code: 500 });
+            }
+        });
+        const request = new sql.Request(transaction)
+        // 上传照片
         const addImgSql = `INSERT INTO person_img (img) OUTPUT INSERTED.id VALUES (@img);`;
+        const imgResult = await request
+            .input('img', sql.VarChar(sql.MAX), req.body['img'])
+            .query(addImgSql);
 
-        const addImgResult = await transaction.request()
-          .input('img', sql.VarChar(sql.MAX), req.body['img'])
-          .query(addImgSql);
+        const imgId = imgResult.recordset[0].id;
 
-        console.log('addImgResult: ', addImgResult);
-        const imgId = addImgResult.recordset[0].id;
-
+        // 添加申请单
         const addPersonSql = `
-          INSERT INTO check_in_application (name, img_id, description, department, approver, reason)
-          OUTPUT INSERTED.id, INSERTED.name, INSERTED.description
-          VALUES (@name, @img_id, @description, @department, @approver, @reason)
+            INSERT INTO person (name, img_id, description, department, approver, reason)
+            VALUES (@name, @img_id, @description, @department, @approver, @reason, 0)
         `;
 
-        const addPersonResult = await transaction
-          .input('name', sql.NVarChar(50), req.body['name'])
-          .input('description', sql.NVarChar(sql.MAX), req.body['description'])
-          .input('department', sql.NVarChar(50), req.body['department'])
-          .input('approver', sql.NVarChar(10), req.body['approver'])
-          .input('reason', sql.NVarChar(500), req.body['reason'])
-          .input('img_id', sql.Int, imgId)
-          .query(addPersonSql);
+        const personResult = await request
+            .input('name', sql.NVarChar(50), req.body['name'])
+            .input('description', sql.NVarChar(sql.MAX), req.body['description'])
+            .input('department', sql.NVarChar(50), req.body['department'])
+            .input('approver', sql.NVarChar(10), req.body['approver'])
+            .input('reason', sql.NVarChar(500), req.body['reason'])
+            .input('img_id', sql.Int, imgId)
+            .query(addPersonSql);
 
-        console.log('addPersonResult: ', addPersonResult);
+        console.log('personResult: ', personResult);
         await transaction.commit();
-        res.json({
-          result: addPersonResult,
-          code: 200
-        });
-      } catch (err) {
+        res.json({ result: '上传成功！', code: 200 });
+    } catch(err) {
+        if (transaction) {
+            try {
+                await transaction.rollback();
+            } catch (rollBackErr) {
+                console.error('rollback error', rollBackErr);
+            }
+        }
         console.error(err);
-        await transaction.rollback();
-        throw err;
-      } finally {
-        req.pool.release(transaction);
-      }
-    } catch (err) {
-      console.error(err);
-      throw err;
+        res.json({ result: '请求失败，刷新重试或联系管理员', code: 500 });
     }
-  } else {
-    res.status(400).send('Missing required fields');
-  }
-});
+})
 
 router.post('/selectById', async (req, res) => {
   const { id } = req.body; // 获取传入的 id
