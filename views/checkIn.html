@@ -271,7 +271,7 @@
                     // 根据id再次获取一次信息以保证信息一致性
                     let matchItem = globalDatabaseInfo.find(item => item.name === bestMatch.label)
                     // console.log('bestMatch', bestMatch)
-                    await fetch('/users/selectById', {
+                    await fetch('/users/selectByIdWithImg', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json'
@@ -328,12 +328,12 @@
             $('#c_img').attr('src', info.img);
             // 将审核id传递给全局变量保存
             checkInId = info.id
-            // staticBackdrop.find('#c_listId').html(info.id);
-            // staticBackdrop.find('#c_date').html(info.date);
-            // staticBackdrop.find('#c_goto').html(info.goto);
-            // staticBackdrop.find('#c_approver').html(info.approver);
-            // staticBackdrop.find('#c_auditResults').html(info.auditResults);
-            // staticBackdrop.find('#c_auditReason').html(info.auditReason);
+            staticBackdrop.find('#c_listId').html(info.id);
+            staticBackdrop.find('#c_date').html(new Date(info.created_date).toLocaleString());
+            staticBackdrop.find('#c_goto').html(info.department);
+            staticBackdrop.find('#c_approver').html(info.approver);
+            staticBackdrop.find('#c_auditResults').html(info.approver_checkIn?'已通过':'未通过');
+            staticBackdrop.find('#c_auditReason').html(info.auditReason);
             staticBackdrop.modal('show');
         }
 

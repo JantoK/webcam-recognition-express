@@ -161,6 +161,68 @@ router.post('/selectById', async (req, res) => {
 }
 });
 
+router.post('/selectByIdWithImg', async (req, res) => {
+    const { id } = req.body; // 获取传入的 id
+    if (!id) {
+      return res.json({ result: 'ID不能为空', code: 400 });
+    }
+    let transaction = null
+    try {
+      // 查询数据
+      transaction = new sql.Transaction(req.pool)
+      await transaction.begin()
+      const request = new sql.Request(transaction)
+
+      const selectData = await request
+        .input('id', sql.Int, id)
+        .query('SELECT * FROM person WHERE id = @id');
+  
+      // 处理数据
+      if (selectData.recordset.length === 0) {
+          return res.json({ result: '查询不到该ID结果', code: 204 });
+      }
+
+      let imgId = selectData.recordset[0].img_id
+
+      const imgRequest = new sql.Request(transaction);
+
+      const imgDate = await imgRequest
+        .input('id', sql.Int, imgId)
+        .query(`SELECT * FROM person_img WHERE id = @id`);
+
+    // 处理数据
+    if (selectData.recordset.length === 0) {
+        return res.json({ result: '查询不到图片', code: 204 });
+    }
+  
+      const result = {
+        id: selectData.recordset[0].id,
+        name: selectData.recordset[0].name,
+        img: imgDate.recordset[0].img,
+        description: selectData.recordset[0].description,
+        checkIn: selectData.recordset[0].checkIn,
+        created_date: selectData.recordset[0].created_date,
+        department: selectData.recordset[0].department,
+        approver: selectData.recordset[0].approver,
+        approver_checkIn: selectData.recordset[0].approver_checkIn,
+        reason: selectData.recordset[0].reason
+      };
+  
+      // 返回数据
+      res.json({ result, code: 200 });
+    } catch (err) {
+      console.error('Error retrieving data from database:', err);
+      if (transaction) {
+        await transaction.rollback();
+      }
+      res.status(500).send('服务器错误，请重试或联系管理员');
+  }finally {
+    if (transaction) {
+      await transaction.commit();
+    }
+  }
+  });
+
 router.post('/updateCheckIn', async (req, res) => {
     const { id } = req.body; // 获取传入的 id
     if (!id) {
